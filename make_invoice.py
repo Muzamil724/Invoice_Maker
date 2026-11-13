@@ -38,3 +38,43 @@ inp["qty"] = qty_num.astype(int)
 lines = inp.merge(master, left_on="code", right_on="Item Code", how="left")
 lines = lines[["Item Code", "Description", "qty", "Unit PriceWithout GST", "Rate of Sale Tax"]]
 print(lines)
+
+# --- Step 3a: inspect the invoice template ---
+from openpyxl import load_workbook
+
+wb = load_workbook("data/CSD_CAV_GR.xlsx")
+ws = wb.active
+
+print("Sheet:", ws.title, "| used range:", ws.dimensions)
+print("Merged ranges:", sorted(str(r) for r in ws.merged_cells.ranges))
+
+for addr in ["A2", "A3", "D3", "A5"]:
+    print(addr, "=", repr(ws[addr].value))
+
+for addr in ["A6", "A7", "D7", "E7", "F7", "G7", "H7", "I7", "D30", "I30"]:
+    c = ws[addr]
+    print(addr, "| value:", c.value, "| format:", c.number_format, "| bold:", c.font.b)
+
+
+# --- Step 3b: fill the header and save a COPY ---
+from datetime import date
+from openpyxl import load_workbook
+
+invoice_no = "TEST-001"
+po_no = "12345678912345"
+place = "CSD Peshawar"
+inv_date = date.today().strftime("%d-%m-%Y")
+
+wb = load_workbook("data/CSD_CAV_GR.xlsx")
+ws = wb.active
+
+ws["A2"] = f"Invoice No: {invoice_no}"
+ws["A3"] = f"Order No:  {po_no}"
+ws["D3"] = f"Date: {inv_date}"
+
+# A5 has three lines; change only the place and keep the rest as it is
+assert "CSD Cav Gr Lhr" in ws["A5"].value, "Template A5 changed: placeholder not found"
+ws["A5"] = ws["A5"].value.replace("CSD Cav Gr Lhr", place)
+
+wb.save("output/test_invoice.xlsx")
+print("saved")
