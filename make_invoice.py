@@ -76,5 +76,53 @@ ws["D3"] = f"Date: {inv_date}"
 assert "CSD Cav Gr Lhr" in ws["A5"].value, "Template A5 changed: placeholder not found"
 ws["A5"] = ws["A5"].value.replace("CSD Cav Gr Lhr", place)
 
+# --- Step 3c: replace the sample rows with our lines ---
+from copy import copy
+
+FIRST = 7           # first item row in the template
+TEMPLATE_TOTAL = 30 # totals row in the template
+COLS = "ABCDEFGHI"
+
+# 1. Remember how an item row and the totals row look
+item_style = {c: copy(ws[f"{c}{FIRST}"]._style) for c in COLS}
+total_style = {c: copy(ws[f"{c}{TEMPLATE_TOTAL}"]._style) for c in COLS}
+blank_style = copy(ws["K1"]._style)   # an unused cell = plain style
+
+# 2. Unmerge the old totals row, then wipe the old rows
+lines = lines.sort_values("Item Code").reset_index(drop=True)
+ws.unmerge_cells(f"A{TEMPLATE_TOTAL}:C{TEMPLATE_TOTAL}")
+for r in range(FIRST, max(ws.max_row, FIRST + len(lines)) + 1):
+    for c in COLS:
+        cell = ws[f"{c}{r}"]
+        cell.value = None
+        cell._style = copy(blank_style)
+
+# 3. Write the item rows
+for n, row in lines.iterrows():
+    r = FIRST + n
+    values = {
+        "A": n + 1,
+        "B": int(row["Item Code"]),
+        "C": row["Description"],
+        "D": int(row["qty"]),
+        "E": float(row["Unit PriceWithout GST"]),
+        "F": float(row["Rate of Sale Tax"]),
+        "G": f"=E{r}*D{r}",
+        "H": f"=F{r}*G{r}",
+        "I": f"=H{r}+G{r}",
+    }
+    for c, v in values.items():
+        ws[f"{c}{r}"] = v
+        ws[f"{c}{r}"]._style = copy(item_style[c])
+
+# 4. Totals row right after the last item
+last = FIRST + len(lines) - 1
+t = last + 1
+for c in COLS:
+    ws[f"{c}{t}"]._style = copy(total_style[c])
+for c in "DGHI":
+    ws[f"{c}{t}"] = f"=SUM({c}{FIRST}:{c}{last})"
+ws.merge_cells(f"A{t}:C{t}")
+
 wb.save("output/test_invoice.xlsx")
 print("saved")
