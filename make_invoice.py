@@ -114,6 +114,8 @@ for n, row in lines.iterrows():
     for c, v in values.items():
         ws[f"{c}{r}"] = v
         ws[f"{c}{r}"]._style = copy(item_style[c])
+        if c == "E":
+            ws[f"{c}{r}"].number_format = "0.00"
 
 # 4. Totals row right after the last item
 last = FIRST + len(lines) - 1
