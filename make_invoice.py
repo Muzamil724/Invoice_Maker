@@ -1,4 +1,18 @@
+import argparse
+from copy import copy
+from datetime import date
+
 import pandas as pd
+from openpyxl import load_workbook
+
+parser = argparse.ArgumentParser(description="Generate a CSD sales tax invoice from a code/qty list.")
+parser.add_argument("input_csv", help="CSV with columns: code,qty")
+parser.add_argument("--invoice", required=True, help="Invoice number, e.g. 1035")
+parser.add_argument("--po", required=True, help="PO / order number from the CSD portal")
+parser.add_argument("--place", required=True, help="Delivery place, e.g. 'CSD Peshawar'")
+parser.add_argument("--date", default=date.today().strftime("%d-%m-%Y"),
+                    help="Invoice date as DD-MM-YYYY (default: today)")
+args = parser.parse_args()
 
 master = pd.read_excel("data/Master_13-02-2025.xlsx", sheet_name="Sheet1")
 
@@ -10,7 +24,7 @@ print(master.shape)
 print(master[["Item Code", "Description", "Unit PriceWithout GST", "Rate of Sale Tax"]].head())
 
 # --- Step 2: read the order list and look each code up in master ---
-inp = pd.read_csv("input/test.csv")
+inp = pd.read_csv(args.input_csv)
 errors = []
 
 # Check 1: qty must be a whole number greater than 0
@@ -39,45 +53,21 @@ lines = inp.merge(master, left_on="code", right_on="Item Code", how="left")
 lines = lines[["Item Code", "Description", "qty", "Unit PriceWithout GST", "Rate of Sale Tax"]]
 print(lines)
 
-# --- Step 3a: inspect the invoice template ---
-from openpyxl import load_workbook
-
-wb = load_workbook("data/CSD_CAV_GR.xlsx")
-ws = wb.active
-
-print("Sheet:", ws.title, "| used range:", ws.dimensions)
-print("Merged ranges:", sorted(str(r) for r in ws.merged_cells.ranges))
-
-for addr in ["A2", "A3", "D3", "A5"]:
-    print(addr, "=", repr(ws[addr].value))
-
-for addr in ["A6", "A7", "D7", "E7", "F7", "G7", "H7", "I7", "D30", "I30"]:
-    c = ws[addr]
-    print(addr, "| value:", c.value, "| format:", c.number_format, "| bold:", c.font.b)
-
-
 # --- Step 3b: fill the header and save a COPY ---
-from datetime import date
-from openpyxl import load_workbook
-
-invoice_no = "TEST-001"
-po_no = "12345678912345"
-place = "CSD Peshawar"
-inv_date = date.today().strftime("%d-%m-%Y")
 
 wb = load_workbook("data/CSD_CAV_GR.xlsx")
 ws = wb.active
 
-ws["A2"] = f"Invoice No: {invoice_no}"
-ws["A3"] = f"Order No:  {po_no}"
-ws["D3"] = f"Date: {inv_date}"
+ws["A2"] = f"Invoice No: {args.invoice}"
+ws["A3"] = f"Order No:  {args.po}"
+ws["D3"] = f"Date: {args.date}"
+
 
 # A5 has three lines; change only the place and keep the rest as it is
 assert "CSD Cav Gr Lhr" in ws["A5"].value, "Template A5 changed: placeholder not found"
-ws["A5"] = ws["A5"].value.replace("CSD Cav Gr Lhr", place)
+ws["A5"] = ws["A5"].value.replace("CSD Cav Gr Lhr", args.place)
 
 # --- Step 3c: replace the sample rows with our lines ---
-from copy import copy
 
 FIRST = 7           # first item row in the template
 TEMPLATE_TOTAL = 30 # totals row in the template
@@ -126,5 +116,6 @@ for c in "DGHI":
     ws[f"{c}{t}"] = f"=SUM({c}{FIRST}:{c}{last})"
 ws.merge_cells(f"A{t}:C{t}")
 
-wb.save("output/test_invoice.xlsx")
-print("saved")
+out_path = f"output/invoice_{args.invoice}.xlsx"
+wb.save(out_path)
+print(f"Saved {out_path} ({len(lines)} items)")
